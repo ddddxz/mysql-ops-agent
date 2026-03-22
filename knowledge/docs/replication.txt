@@ -1,0 +1,138 @@
+MySQL 复制配置与故障排查指南
+
+一、复制架构类型
+
+1. 异步复制（默认）
+   - 主库提交事务后立即返回，不等待从库确认
+   - 优点：性能高，主库不受从库影响
+   - 缺点：可能存在数据延迟，主库崩溃可能丢失数据
+
+2. 半同步复制
+   - 主库等待至少一个从库确认收到 binlog 后才提交
+   - rpl_semi_sync_master_enabled = 1
+   - rpl_semi_sync_master_timeout = 1000（超时后降级为异步）
+   - 优点：数据安全性更高
+   - 缺点：性能略有下降
+
+3. 组复制（Group Replication）
+   - MySQL 5.7+ 支持的多主复制方案
+   - 基于 Paxos 协议实现一致性
+   - 支持单主模式和多主模式
+
+二、复制配置要点
+
+1. 主库配置
+   [mysqld]
+   server-id = 1
+   log-bin = mysql-bin
+   binlog_format = ROW
+   binlog_row_image = FULL
+   gtid_mode = ON
+   enforce_gtid_consistency = ON
+   sync_binlog = 1
+   innodb_flush_log_at_trx_commit = 1
+
+2. 从库配置
+   [mysqld]
+   server-id = 2
+   relay-log = relay-bin
+   read_only = ON
+   super_read_only = ON
+   log-slave-updates = ON
+   gtid_mode = ON
+   enforce_gtid_consistency = ON
+
+3. 创建复制用户
+   CREATE USER 'repl'@'%' IDENTIFIED BY 'password';
+   GRANT REPLICATION SLAVE ON *.* TO 'repl'@'%';
+   FLUSH PRIVILEGES;
+
+4. 启动复制（GTID 方式）
+   CHANGE MASTER TO
+     MASTER_HOST = 'master_host',
+     MASTER_USER = 'repl',
+     MASTER_PASSWORD = 'password',
+     MASTER_AUTO_POSITION = 1;
+   START SLAVE;
+
+三、复制状态监控
+
+1. 查看复制状态
+   SHOW SLAVE STATUS\G
+   
+   关键指标：
+   - Slave_IO_Running: Yes/No
+   - Slave_SQL_Running: Yes/No
+   - Seconds_Behind_Master: 延迟秒数
+   - Last_IO_Error: IO 线程错误信息
+   - Last_SQL_Error: SQL 线程错误信息
+   - Retrieved_Gtid_Set: 已接收的 GTID 集合
+   - Executed_Gtid_Set: 已执行的 GTID 集合
+
+2. 监控延迟
+   - Seconds_Behind_Master > 0 表示存在延迟
+   - 使用 pt-heartbeat 进行精确延迟监控
+   - performance_schema.replication_connection_status
+   - performance_schema.replication_applier_status
+
+四、常见复制故障排查
+
+1. IO 线程停止
+   原因：
+   - 网络连接问题
+   - 复制用户权限不足
+   - 主库 binlog 被删除
+   - max_allowed_packet 设置过小
+   
+   排查步骤：
+   - 检查网络连通性
+   - 检查复制用户权限
+   - 检查主库 binlog 是否存在
+   - 查看错误日志
+
+2. SQL 线程停止
+   原因：
+   - 主从数据不一致
+   - 从库上有直接写入操作
+   - 存储过程/触发器问题
+   - 主键冲突
+   
+   解决方法：
+   - 跳过错误：SET GLOBAL SQL_SLAVE_SKIP_COUNTER = 1
+   - GTID 模式：SET GTID_NEXT='uuid:n'; BEGIN; COMMIT;
+   - 重新构建从库
+
+3. 复制延迟
+   原因：
+   - 从库硬件性能不足
+   - 大事务执行时间长
+   - 网络带宽不足
+   - 从库上有其他查询负载
+   
+   优化方法：
+   - 开启多线程复制：slave_parallel_workers = 4
+   - 使用 ROW 格式 binlog
+   - 优化大事务，拆分执行
+   - 使用并行复制：slave_parallel_type = LOGICAL_CLOCK
+
+五、Agent 诊断规则
+
+当用户询问复制问题时，Agent 应：
+
+1. 首先执行 SHOW SLAVE STATUS 获取状态
+2. 检查 IO_Running 和 SQL_Running 状态
+3. 检查 Seconds_Behind_Master 延迟值
+4. 分析 Last_IO_Error 和 Last_SQL_Error
+5. 根据错误类型给出解决方案
+6. 建议开启多线程复制优化性能
+7. 检查是否需要重建复制
+
+六、最佳实践
+
+1. 使用 GTID 模式进行复制
+2. 开启半同步复制提高数据安全
+3. 配置合理的复制延迟告警
+4. 定期进行复制延迟测试
+5. 从库设置 read_only 防止误写入
+6. 监控复制状态和延迟指标
+7. 制定复制故障恢复预案

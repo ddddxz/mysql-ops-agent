@@ -1,0 +1,24 @@
+{
+  "session_id": "20260320_195000_8f970422",
+  "user_id": "test_user",
+  "created_at": "2026-03-20T19:50:00.313076",
+  "updated_at": "2026-03-20T19:51:22.069546",
+  "messages": [
+    {
+      "role": "user",
+      "content": "检查 MySQL 健康状态"
+    },
+    {
+      "role": "assistant",
+      "content": "MySQL 健康状态良好"
+    },
+    {
+      "role": "user",
+      "content": "继续上次的对话"
+    },
+    {
+      "role": "assistant",
+      "content": "好的，继续为您服务"
+    }
+  ]
+}

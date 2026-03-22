@@ -1,0 +1,38 @@
+# MySQL EXPLAIN 执行计划解读（Agent 慢查询诊断核心）
+
+## 一、核心字段解读
+1. id
+   查询执行顺序，id 越大越先执行。
+
+2. select_type
+   SIMPLE：简单查询（最优）
+   SUBQUERY：子查询
+   DERIVED：派生表
+   UNION：联合查询
+
+3. type（最重要，访问类型）
+   性能从好到坏：
+   system > const > eq_ref > ref > range > index > ALL
+   ALL = 全表扫描，必须优化。
+
+4. key
+   实际使用的索引，NULL 表示未使用索引。
+
+5. rows
+   预估扫描行数，越大越慢。
+
+6. Extra（关键优化信号）
+   Using index：覆盖索引，最优。
+   Using where：使用 WHERE 过滤。
+   Using filesort：需要文件排序，必须优化。
+   Using temporary：使用临时表，必须优化。
+
+## 二、Agent 诊断规则
+1. type=ALL → 全表扫描 → 必须加索引。
+2. key=NULL → 未走索引 → 检查索引是否存在、是否失效。
+3. Extra=Using filesort → ORDER BY 无索引。
+4. Extra=Using temporary → GROUP BY 无索引。
+
+## 三、执行命令
+EXPLAIN SELECT * FROM table WHERE xxx;
+EXPLAIN ANALYZE SELECT * FROM table WHERE xxx;（8.0 真实执行耗时）

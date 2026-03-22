@@ -1,0 +1,148 @@
+MySQL 备份与恢复策略指南
+
+一、备份类型
+
+1. 逻辑备份
+   - 使用 mysqldump 或 mydumper 导出 SQL 语句
+   - 优点：可读性强，跨版本兼容
+   - 缺点：大数据量备份恢复慢
+   
+   常用命令：
+   mysqldump -u root -p --single-transaction --routines --triggers --events --all-databases > backup.sql
+   mysqldump -u root -p --single-transaction db_name table_name > table_backup.sql
+
+2. 物理备份
+   - 直接复制数据文件
+   - 使用 Percona XtraBackup 进行热备份
+   - 优点：备份恢复速度快
+   - 缺点：需要相同版本恢复
+   
+   XtraBackup 命令：
+   xtrabackup --backup --target-dir=/backup/full --user=root --password=xxx
+   xtrabackup --prepare --target-dir=/backup/full
+   xtrabackup --copy-back --target-dir=/backup/full
+
+3. 快照备份
+   - 使用 LVM 或云厂商快照功能
+   - 优点：速度快，对业务影响小
+   - 缺点：依赖存储系统
+
+二、备份策略设计
+
+1. 全量备份
+   - 周期：每天或每周
+   - 时间：业务低峰期（凌晨）
+   - 保留：至少保留 7 天
+
+2. 增量备份
+   - 基于 binlog 或 XtraBackup 增量
+   - 周期：每小时或每 4 小时
+   - 保留：配合全量备份保留
+
+3. binlog 备份
+   - 实时同步 binlog 到备份服务器
+   - 用于 Point-in-Time Recovery (PITR)
+   - 保留：至少 7 天
+
+三、mysqldump 关键参数
+
+--single-transaction    InnoDB 一致性快照备份
+--master-data=2         记录备份时的 binlog 位置
+--flush-logs            切换新的 binlog 文件
+--routines              备份存储过程
+--triggers              备份触发器
+--events                备份事件
+--hex-blob              十六进制导出 BLOB
+--set-gtid-purged=OFF   GTID 模式备份选项
+--where                 条件导出
+--quick                 大表快速导出
+
+四、恢复操作
+
+1. 逻辑备份恢复
+   mysql -u root -p < backup.sql
+   
+   恢复单库：
+   mysql -u root -p -D db_name < db_backup.sql
+
+2. 物理备份恢复
+   # 停止 MySQL
+   systemctl stop mysqld
+   
+   # 清空数据目录
+   rm -rf /var/lib/mysql/*
+   
+   # 恢复数据
+   xtrabackup --copy-back --target-dir=/backup/full
+   
+   # 修改权限
+   chown -R mysql:mysql /var/lib/mysql
+   
+   # 启动 MySQL
+   systemctl start mysqld
+
+3. PITR 时间点恢复
+   # 先恢复全量备份
+   mysql -u root -p < full_backup.sql
+   
+   # 应用 binlog 到指定时间点
+   mysqlbinlog --start-datetime="2024-01-01 00:00:00" \
+               --stop-datetime="2024-01-01 12:00:00" \
+               mysql-bin.000001 | mysql -u root -p
+
+五、备份验证
+
+1. 定期恢复测试
+   - 每月进行一次恢复演练
+   - 验证备份文件完整性
+   - 记录恢复时间
+
+2. 备份监控指标
+   - 备份是否成功完成
+   - 备份文件大小变化
+   - 备份执行时间
+   - 备份文件完整性校验
+
+六、云厂商备份方案
+
+1. AWS RDS
+   - 自动备份：保留 1-35 天
+   - 手动快照：永久保留
+   - 跨区域复制备份
+   - PITR 支持
+
+2. 阿里云 RDS
+   - 自动备份：每日备份
+   - 快照备份：秒级恢复
+   - 跨区域备份
+   - 库表级恢复
+
+七、Agent 诊断规则
+
+当用户询问备份恢复问题时，Agent 应：
+
+1. 检查当前备份配置
+   SHOW VARIABLES LIKE '%backup%';
+   
+2. 检查 binlog 配置
+   SHOW VARIABLES LIKE 'log_bin%';
+   SHOW MASTER STATUS;
+   
+3. 根据数据量推荐备份方案：
+   - < 10GB：mysqldump 逻辑备份
+   - 10GB-100GB：mydumper 并行备份
+   - > 100GB：XtraBackup 物理备份
+
+4. 提供备份命令示例
+5. 建议备份保留策略
+6. 提醒定期恢复测试
+
+八、最佳实践
+
+1. 异地备份，防止机房故障
+2. 加密敏感数据备份
+3. 备份文件压缩节省空间
+4. 监控备份任务执行状态
+5. 制定备份恢复 SLA
+6. 文档化恢复流程
+7. 定期进行恢复演练

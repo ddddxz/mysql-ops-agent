@@ -1,0 +1,179 @@
+MySQL 事务与锁机制指南
+
+一、事务基础
+
+1. ACID 特性
+   - 原子性 (Atomicity)：事务要么全部执行，要么全部不执行
+   - 一致性 (Consistency)：事务前后数据保持一致
+   - 隔离性 (Isolation)：并发事务互不干扰
+   - 持久性 (Durability)：事务提交后永久保存
+
+2. 事务控制语句
+   START TRANSACTION / BEGIN  开始事务
+   COMMIT                      提交事务
+   ROLLBACK                    回滚事务
+   SAVEPOINT name              创建保存点
+   ROLLBACK TO SAVEPOINT name  回滚到保存点
+
+二、隔离级别
+
+1. 四种隔离级别
+   READ UNCOMMITTED  读未提交，可能脏读
+   READ COMMITTED    读已提交，可能不可重复读
+   REPEATABLE READ   可重复读（MySQL 默认），可能幻读
+   SERIALIZABLE      串行化，最高隔离级别
+
+2. 查看和设置隔离级别
+   -- 查看全局隔离级别
+   SELECT @@global.transaction_isolation;
+   
+   -- 查看会话隔离级别
+   SELECT @@transaction_isolation;
+   
+   -- 设置隔离级别
+   SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;
+   SET GLOBAL TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+
+3. 各隔离级别解决的问题
+   | 隔离级别 | 脏读 | 不可重复读 | 幻读 |
+   |---------|------|-----------|------|
+   | READ UNCOMMITTED | 可能 | 可能 | 可能 |
+   | READ COMMITTED   | 不会 | 可能 | 可能 |
+   | REPEATABLE READ  | 不会 | 不会 | 可能* |
+   | SERIALIZABLE     | 不会 | 不会 | 不会 |
+   
+   *MySQL InnoDB 通过 MVCC 和 Next-Key Lock 解决了幻读
+
+三、锁类型
+
+1. 全局锁
+   - 锁定整个数据库实例
+   - 命令：FLUSH TABLES WITH READ LOCK
+   - 用途：全库逻辑备份
+   - 释放：UNLOCK TABLES
+
+2. 表级锁
+   - 表锁：LOCK TABLES t READ/WRITE
+   - 元数据锁 (MDL)：DDL 操作自动加锁
+   - 意向锁：IS/IX，表示事务意图
+
+3. 行级锁
+   - 记录锁 (Record Lock)：锁定单条记录
+   - 间隙锁 (Gap Lock)：锁定记录间隙
+   - 临键锁 (Next-Key Lock)：记录锁 + 间隙锁
+   - 插入意向锁 (Insert Intention Lock)
+
+4. 共享锁与排他锁
+   共享锁 (S)：SELECT ... LOCK IN SHARE MODE
+   排他锁 (X)：SELECT ... FOR UPDATE
+
+四、锁查看与分析
+
+1. 查看锁信息 (MySQL 8.0+)
+   SELECT * FROM performance_schema.data_locks;
+   SELECT * FROM performance_schema.data_lock_waits;
+
+2. 查看 InnoDB 锁信息
+   SHOW ENGINE INNODB STATUS;
+   
+   查看 TRANSACTIONS 部分：
+   ---TRANSACTION 12345, ACTIVE 10 sec
+   2 lock struct(s), heap size 1136, 1 row lock(s)
+
+3. 查看锁等待
+   SELECT 
+     r.trx_id waiting_trx_id,
+     r.trx_mysql_thread_id waiting_thread,
+     r.trx_query waiting_query,
+     b.trx_id blocking_trx_id,
+     b.trx_mysql_thread_id blocking_thread,
+     b.trx_query blocking_query
+   FROM information_schema.innodb_lock_waits w
+   JOIN information_schema.innodb_trx b ON b.trx_id = w.blocking_trx_id
+   JOIN information_schema.innodb_trx r ON r.trx_id = w.requesting_trx_id;
+
+五、死锁处理
+
+1. 死锁产生条件
+   - 互斥条件
+   - 持有并等待
+   - 不可抢占
+   - 循环等待
+
+2. 查看死锁信息
+   SHOW ENGINE INNODB STATUS;
+   
+   查看 LATEST DETECTED DEADLOCK 部分
+
+3. 死锁检测配置
+   innodb_deadlock_detect = ON（默认开启）
+   innodb_lock_wait_timeout = 50（锁等待超时时间）
+
+4. 避免死锁建议
+   - 按相同顺序访问表和行
+   - 保持事务简短
+   - 避免长事务
+   - 合理设计索引
+   - 降低隔离级别（如需要）
+
+六、锁优化建议
+
+1. 索引优化
+   - 确保查询使用索引
+   - 无索引会锁全表
+   - 使用覆盖索引减少锁范围
+
+2. 事务优化
+   - 减小事务粒度
+   - 避免在事务中执行耗时操作
+   - 及时提交事务
+
+3. SQL 优化
+   - 避免大范围扫描
+   - 使用 LIMIT 限制结果集
+   - 避免在高峰期执行 DDL
+
+七、Agent 诊断规则
+
+当用户询问锁问题时，Agent 应：
+
+1. 检查当前锁状态
+   SHOW ENGINE INNODB STATUS;
+   SELECT * FROM performance_schema.data_locks;
+
+2. 检查事务状态
+   SELECT * FROM information_schema.innodb_trx;
+
+3. 检查锁等待
+   SELECT * FROM sys.innodb_lock_waits;
+
+4. 分析建议：
+   - 存在死锁：分析死锁日志，建议优化事务顺序
+   - 锁等待超时：检查长事务，建议优化索引
+   - 大量行锁：检查 SQL 是否使用索引
+
+八、常见问题解决
+
+1. 锁等待超时
+   ERROR 1205 (HY000): Lock wait timeout exceeded
+   
+   解决：
+   - 检查是否有长事务未提交
+   - 增加 innodb_lock_wait_timeout
+   - 优化 SQL 减少锁持有时间
+
+2. 死锁
+   ERROR 1213 (40001): Deadlock found when trying to get lock
+   
+   解决：
+   - 分析死锁日志
+   - 调整事务执行顺序
+   - 优化索引减少锁范围
+
+3. 元数据锁等待
+   SHOW PROCESSLIST 显示 Waiting for table metadata lock
+   
+   解决：
+   - 检查是否有长事务持有 MDL
+   - 避免在业务高峰执行 DDL
+   - 使用 online DDL

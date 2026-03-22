@@ -1,0 +1,46 @@
+# InnoDB 存储引擎核心（Agent 锁与事务诊断）
+
+## 一、事务隔离级别（默认 REPEATABLE READ）
+READ UNCOMMITTED
+READ COMMITTED
+REPEATABLE READ（默认）
+SERIALIZABLE
+
+查看：
+SHOW VARIABLES LIKE 'transaction_isolation';
+
+## 二、锁机制
+1. InnoDB 行锁，基于索引实现。
+2. 无索引 → 升级为表锁。
+3. 间隙锁（GAP）用于防止幻读。
+
+## 三、锁等待与死锁排查
+-- 查看正在运行的长事务
+SELECT
+  trx_id,
+  trx_state,
+  trx_started,
+  TIMESTAMPDIFF(SECOND, trx_started, NOW()) AS duration_sec
+FROM INFORMATION_SCHEMA.INNODB_TRX
+WHERE TIMESTAMPDIFF(SECOND, trx_started, NOW()) > 60;
+
+-- 查看锁等待关系
+SELECT
+  r.trx_mysql_thread_id AS waiting_thread,
+  b.trx_mysql_thread_id AS blocking_thread
+FROM INFORMATION_SCHEMA.INNODB_LOCK_WAITS w
+JOIN INFORMATION_SCHEMA.INNODB_TRX b ON w.blocking_trx_id = b.trx_id
+JOIN INFORMATION_SCHEMA.INNODB_TRX r ON w.requesting_trx_id = r.trx_id;
+
+-- 查看最近死锁
+SHOW ENGINE INNODB STATUS;
+
+## 四、关键配置
+innodb_lock_wait_timeout = 5
+innodb_rollback_on_timeout = ON
+innodb_log_file_size = 1G
+
+## 五、Agent 处理策略
+1. 长事务 > 60秒 → 提示风险。
+2. 存在锁等待 → 输出阻塞线程 ID。
+3. 死锁 → 提取 LATEST DETECTED DEADLOCK 信息。

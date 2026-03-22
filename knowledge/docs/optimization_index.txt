@@ -1,0 +1,46 @@
+# MySQL 索引优化（Agent 专用）
+
+## 一、索引类型与适用场景
+1. 主键索引 PRIMARY KEY
+   每张表必须有，推荐自增 BIGINT。
+2. 普通索引 INDEX
+   用于单字段高频 WHERE 查询。
+3. 联合索引 INDEX(a,b,c)
+   用于多字段组合查询，遵循最左前缀原则。
+4. 唯一索引 UNIQUE
+   用于值必须唯一的字段（手机号、用户名）。
+5. 全文索引 FULLTEXT
+   用于文本内容搜索，替代 LIKE %xxx%。
+
+## 二、联合索引最左前缀原则
+索引 (a,b,c) 生效场景：
+WHERE a
+WHERE a,b
+WHERE a,b,c
+不生效：WHERE b、WHERE c、WHERE b,c
+
+## 三、索引失效场景（Agent 自动识别）
+1. 字段上使用函数：WHERE DATE(create_time) = '2026-01-01'
+2. 隐式类型转换：WHERE phone = 13800138000（phone 是字符串）
+3. LIKE 左模糊：WHERE name LIKE '%张三'
+4. OR 连接无索引字段
+5. ORDER BY 混合 ASC/DESC
+6. 使用 NOT IN、!=、<> 等导致索引失效
+
+## 四、索引诊断 SQL
+-- 查看表索引
+SHOW INDEX FROM table_name;
+
+-- 查询未使用过的索引
+SELECT
+  TABLE_NAME,
+  INDEX_NAME
+FROM performance_schema.table_io_waits_summary_by_index_usage
+WHERE INDEX_NAME IS NOT NULL
+  AND COUNT_STAR = 0;
+
+## 五、索引创建规范
+1. 高频 WHERE 字段必须建索引。
+2. 多条件查询优先建联合索引。
+3. 区分度低的字段（性别、状态）不适合单独建索引。
+4. 禁止在一张表建立过多索引（影响写入性能）。

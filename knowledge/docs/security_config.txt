@@ -1,0 +1,203 @@
+MySQL 安全配置与用户管理指南
+
+一、用户管理
+
+1. 创建用户
+   CREATE USER 'username'@'host' IDENTIFIED BY 'password';
+   CREATE USER 'app_user'@'%' IDENTIFIED BY 'StrongP@ss123!';
+   CREATE USER 'admin'@'localhost' IDENTIFIED WITH mysql_native_password BY 'password';
+
+2. 修改用户
+   -- 修改密码
+   ALTER USER 'username'@'host' IDENTIFIED BY 'new_password';
+   
+   -- 修改认证方式
+   ALTER USER 'username'@'host' IDENTIFIED WITH caching_sha2_password BY 'password';
+   
+   -- 锁定/解锁用户
+   ALTER USER 'username'@'host' ACCOUNT LOCK;
+   ALTER USER 'username'@'host' ACCOUNT UNLOCK;
+
+3. 删除用户
+   DROP USER 'username'@'host';
+   DROP USER IF EXISTS 'username'@'host';
+
+二、权限管理
+
+1. 权限类型
+   - 全局权限：*.*
+   - 数据库权限：db_name.*
+   - 表权限：db_name.table_name
+   - 列权限：db_name.table_name(column_name)
+
+2. 常用权限
+   ALL PRIVILEGES      所有权限
+   SELECT              查询权限
+   INSERT              插入权限
+   UPDATE              更新权限
+   DELETE              删除权限
+   CREATE              创建表权限
+   DROP                删除表权限
+   ALTER               修改表权限
+   INDEX               创建/删除索引权限
+   EXECUTE             执行存储过程权限
+   REPLICATION SLAVE   复制权限
+   REPLICATION CLIENT  复制客户端权限
+   SUPER               超级管理员权限
+   PROCESS             查看进程权限
+   RELOAD              FLUSH 权限
+   SHUTDOWN            关闭服务器权限
+
+3. 授权操作
+   -- 授权
+   GRANT SELECT, INSERT ON db_name.* TO 'username'@'host';
+   GRANT ALL PRIVILEGES ON *.* TO 'admin'@'localhost' WITH GRANT OPTION;
+   
+   -- 回收权限
+   REVOKE SELECT ON db_name.* FROM 'username'@'host';
+   REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'username'@'host';
+   
+   -- 刷新权限
+   FLUSH PRIVILEGES;
+
+4. 查看权限
+   SHOW GRANTS FOR 'username'@'host';
+   SHOW GRANTS FOR CURRENT_USER();
+
+三、安全配置
+
+1. 网络安全
+   [mysqld]
+   bind-address = 0.0.0.0        # 绑定地址
+   port = 3306                    # 端口
+   skip-name-resolve = ON         # 禁用 DNS 解析
+   max_connections = 500          # 最大连接数
+   max_connect_errors = 100       # 最大连接错误数
+
+2. 认证安全
+   [mysqld]
+   default_authentication_plugin = mysql_native_password
+   mysql_native_password = ON
+   sha256_password_private_key_path = private_key.pem
+   sha256_password_public_key_path = public_key.pem
+
+3. 密码策略
+   [mysqld]
+   validate_password = ON
+   validate_password_length = 8
+   validate_password_mixed_case_count = 1
+   validate_password_number_count = 1
+   validate_password_special_char_count = 1
+   validate_password_policy = MEDIUM
+
+4. SSL/TLS 配置
+   [mysqld]
+   ssl = ON
+   ssl_ca = /path/to/ca.pem
+   ssl_cert = /path/to/server-cert.pem
+   ssl_key = /path/to/server-key.pem
+   require_secure_transport = ON
+
+5. 连接加密
+   -- 强制 SSL 连接
+   CREATE USER 'secure_user'@'%' IDENTIFIED BY 'password' REQUIRE SSL;
+   
+   -- 强制 X.509 证书
+   CREATE USER 'cert_user'@'%' IDENTIFIED BY 'password' REQUIRE X509;
+
+四、审计日志
+
+1. 开启审计日志
+   [mysqld]
+   plugin-load = audit_log.so
+   audit_log_format = JSON
+   audit_log_policy = ALL
+   audit_log_rotate_on_size = 10485760
+   audit_log_rotations = 5
+
+2. 企业版审计
+   -- 安装审计插件
+   INSTALL PLUGIN audit_log SONAME 'audit_log.so';
+   
+   -- 配置审计规则
+   SET GLOBAL audit_log_policy = 'ALL';
+
+五、SQL 注入防护
+
+1. 参数化查询
+   -- 使用预处理语句
+   PREPARE stmt FROM 'SELECT * FROM users WHERE id = ?';
+   SET @id = 1;
+   EXECUTE stmt USING @id;
+   DEALLOCATE PREPARE stmt;
+
+2. 输入验证
+   - 验证数据类型
+   - 限制输入长度
+   - 过滤特殊字符
+   - 使用白名单
+
+3. 最小权限原则
+   - 应用账户只授予必要权限
+   - 禁止使用 root 账户连接应用
+   - 不同应用使用不同账户
+
+六、安全加固检查清单
+
+1. 账户安全
+   [ ] 删除匿名用户
+   [ ] 删除测试数据库
+   [ ] 设置强密码策略
+   [ ] 禁用 root 远程登录
+   [ ] 定期审计用户权限
+
+2. 网络安全
+   [ ] 配置防火墙规则
+   [ ] 禁用 skip-networking
+   [ ] 使用 SSL/TLS 加密
+   [ ] 限制连接来源 IP
+
+3. 数据安全
+   [ ] 敏感数据加密
+   [ ] 定期备份数据
+   [ ] 加密备份文件
+   [ ] 限制文件访问权限
+
+4. 日志审计
+   [ ] 开启错误日志
+   [ ] 开启慢查询日志
+   [ ] 开启审计日志
+   [ ] 定期检查日志
+
+七、Agent 诊断规则
+
+当用户询问安全问题时，Agent 应：
+
+1. 检查用户权限
+   SELECT user, host FROM mysql.user;
+   SHOW GRANTS FOR 'username'@'host';
+
+2. 检查安全配置
+   SHOW VARIABLES LIKE '%ssl%';
+   SHOW VARIABLES LIKE '%password%';
+   SHOW VARIABLES LIKE 'validate_password%';
+
+3. 检查匿名用户
+   SELECT user, host FROM mysql.user WHERE user = '';
+
+4. 提供安全建议：
+   - 发现弱密码：建议修改为强密码
+   - 存在匿名用户：建议删除
+   - 未启用 SSL：建议配置 SSL
+   - 权限过大：建议最小权限原则
+
+八、最佳实践
+
+1. 定期安全审计
+2. 使用强密码策略
+3. 限制网络访问
+4. 启用 SSL 加密
+5. 最小权限原则
+6. 定期更新补丁
+7. 监控异常登录
+8. 备份权限配置

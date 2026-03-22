@@ -1,0 +1,31 @@
+# MySQL 缓冲与缓存优化（Agent 性能调优）
+
+## 一、InnoDB 缓冲池（核心）
+参数：innodb_buffer_pool_size
+作用：缓存表数据、索引、锁信息。
+推荐值：物理内存的 50%~70%。
+
+## 二、缓冲池监控 SQL
+-- 查看缓冲池命中率（应 > 99%）
+SHOW ENGINE INNODB STATUS;
+
+-- 查看缓冲池配置
+SHOW VARIABLES LIKE 'innodb_buffer_pool%';
+
+## 三、关键配置
+innodb_buffer_pool_size = 4G （根据服务器内存调整）
+innodb_buffer_pool_instances = 4（多核 CPU）
+innodb_log_file_size = 1G~4G
+innodb_flush_log_at_trx_commit = 1（数据安全）/ 2（性能优先）
+
+## 四、临时表优化
+tmp_table_size = 256M
+max_heap_table_size = 256M
+
+-- 查看临时表是否溢出磁盘
+SHOW GLOBAL STATUS LIKE 'Created_tmp_disk_tables';
+
+## 五、Agent 判断逻辑
+1. 缓冲池小于 2G → 提示调大。
+2. 命中率 < 99% → 缓冲池不足或 SQL 效率低。
+3. 临时磁盘表过多 → 调大 tmp_table_size。

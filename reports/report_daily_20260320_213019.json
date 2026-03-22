@@ -1,0 +1,25 @@
+{
+  "report_type": "daily",
+  "generated_at": "2026-03-20T21:30:19.098797",
+  "server_info": {
+    "version": "8.0.12",
+    "hostname": "ddd",
+    "port": "3306",
+    "datadir": "D:\\3177\\phpstudy_pro\\Extensions\\MySQL8.0.12\\data\\"
+  },
+  "status_variables": {
+    "uptime": "22822",
+    "queries": "72",
+    "connections": "11",
+    "slow_queries": "0",
+    "bytes_received": "1915",
+    "bytes_sent": "126654"
+  },
+  "health_metrics": {
+    "connection_usage": "1/100",
+    "connection_usage_percent": 1.0,
+    "buffer_pool_hit_rate": 95.16,
+    "table_locks_waited": 0,
+    "innodb_row_lock_waits": 0
+  }
+}

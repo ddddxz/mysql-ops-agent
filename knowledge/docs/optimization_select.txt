@@ -1,0 +1,49 @@
+# MySQL SELECT 语句优化（Agent 专用）
+
+## 一、SELECT 优化核心原则
+1. 禁止使用 SELECT *，只查询业务需要的字段，减少 IO 和内存消耗。
+2. WHERE 条件避免在索引字段上使用函数、运算、类型转换。
+3. 避免使用 LIKE '%xxx' 左模糊，会导致索引失效。
+4. 小表驱动大表，JOIN 字段必须建立索引。
+5. ORDER BY / GROUP BY 字段尽量使用索引字段，避免文件排序。
+6. 所有查询尽量加 LIMIT，减少数据返回量。
+
+## 二、WHERE 子句优化
+1. 错误：WHERE column = NULL
+   正确：WHERE column IS NULL / IS NOT NULL
+2. 错误：WHERE function(column) = 'xxx'
+   正确：避免在列上使用函数，确保索引可用
+3. 错误：WHERE id = '123'（id 是数字类型）
+   正确：WHERE id = 123
+4. OR 连接的字段必须全部有索引，否则会全表扫描。
+
+## 三、JOIN 优化
+1. 小表 JOIN 大表，减少扫描行数。
+2. 关联字段必须同类型、同字符集、有索引。
+3. 尽量避免 LEFT JOIN + WHERE 右表字段 IS NOT NULL，等价于 INNER JOIN。
+4. 禁止跨库、跨字符集 JOIN。
+
+## 四、ORDER BY / GROUP BY 优化
+1. 排序字段要有索引，避免 Using filesort。
+2. 不要混合 ASC/DESC 排序。
+3. GROUP BY 底层是排序，同样需要索引。
+4. 避免 GROUP BY 非索引字段导致临时表 + 文件排序。
+
+## 五、可直接执行的监控 SQL
+-- 查询最慢的 TOP10 SELECT 语句
+SELECT
+  SCHEMA_NAME,
+  DIGEST_TEXT,
+  COUNT_STAR,
+  SUM_TIMER_WAIT/1000000000 AS total_time_sec,
+  AVG_TIMER_WAIT/1000000000 AS avg_time_sec
+FROM performance_schema.events_statements_summary_by_digest
+WHERE DIGEST_TEXT LIKE 'SELECT%'
+ORDER BY SUM_TIMER_WAIT DESC
+LIMIT 10;
+
+-- 查询使用 SELECT * 的语句
+SELECT DIGEST_TEXT
+FROM performance_schema.events_statements_summary_by_digest
+WHERE DIGEST_TEXT REGEXP '^SELECT \\*'
+LIMIT 10;
